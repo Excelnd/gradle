@@ -19,30 +19,44 @@ package org.gradle.api.internal.provider;
 import org.gradle.api.Action;
 import org.gradle.api.Task;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
+import org.gradle.internal.Cast;
 import org.gradle.internal.Describables;
 import org.gradle.internal.DisplayName;
 import org.gradle.internal.logging.text.TreeFormatter;
 
 import javax.annotation.Nullable;
 
-public abstract class AbstractProperty<T> extends AbstractMinimalProvider<T> implements PropertyInternal<T> {
+public abstract class AbstractProperty<T, S extends ValueSupplier> extends AbstractMinimalProvider<T> implements PropertyInternal<T> {
     private enum State {
         ImplicitValue, ExplicitValue, Final
     }
 
+    private static final FinalizedValue<Object> FINALIZED_VALUE = new FinalizedValue<>();
     private static final DisplayName DEFAULT_DISPLAY_NAME = Describables.of("this property");
     private static final DisplayName DEFAULT_VALIDATION_DISPLAY_NAME = Describables.of("a property");
 
-    private final PropertyHost host;
-    private State state = State.ImplicitValue;
-    private boolean finalizeOnNextGet;
-    private boolean disallowChanges;
-    private boolean disallowUnsafeRead;
     private Task producer;
     private DisplayName displayName;
+    private FinalizationState<S> state;
+    private S value;
 
     public AbstractProperty(PropertyHost host) {
-        this.host = host;
+        state = new NonFinalizedValue<>(host);
+    }
+
+    protected void init(S initialValue, S convention) {
+        this.value = initialValue;
+        this.state.setConvention(convention);
+    }
+
+    protected void init(S initialValue) {
+        init(initialValue, initialValue);
+    }
+
+    @Override
+    public boolean isPresent() {
+        beforeRead();
+        return getSupplier().isPresent();
     }
 
     @Override
@@ -84,7 +98,9 @@ public abstract class AbstractProperty<T> extends AbstractMinimalProvider<T> imp
         this.producer = task;
     }
 
-    protected abstract ValueSupplier getSupplier();
+    protected S getSupplier() {
+        return value;
+    }
 
     /**
      * Returns a diagnostic string describing the current source of value of this property. Should not realize the value.
@@ -126,105 +142,272 @@ public abstract class AbstractProperty<T> extends AbstractMinimalProvider<T> imp
 
     @Override
     public void finalizeValue() {
-        if (state != State.Final) {
-            makeFinal();
+        if (state.isNotFinal()) {
+            value = finalValue();
+            state = state.finalState();
         }
-        state = State.Final;
-        disallowChanges = true;
     }
 
     @Override
     public void disallowChanges() {
-        disallowChanges = true;
+        state.disallowChanges();
     }
 
     @Override
     public void finalizeValueOnRead() {
-        finalizeOnNextGet = true;
+        state.finalizeOnNextGet();
     }
 
     @Override
     public void implicitFinalizeValue() {
-        disallowChanges = true;
-        finalizeOnNextGet = true;
+        state.disallowChanges();
+        state.finalizeOnNextGet();
     }
 
     @Override
     public void disallowUnsafeRead() {
-        disallowUnsafeRead = true;
-        finalizeOnNextGet = true;
+        state.disallowUnsafeRead();
     }
 
-    protected abstract void applyDefaultValue();
+    protected abstract S finalValue();
 
-    protected abstract void makeFinal();
+    protected void setSupplier(S supplier) {
+        assertCanMutate();
+        this.value = state.explicitValue(supplier);
+    }
+
+    protected void setConvention(S convention) {
+        assertCanMutate();
+        this.value = state.applyConvention(value, convention);
+    }
 
     /**
      * Call prior to reading the value of this property.
      */
     protected void beforeRead() {
-        if (state == State.Final) {
-            return;
-        }
-        if (disallowUnsafeRead) {
-            String reason = host.beforeRead();
-            if (reason != null) {
-                TreeFormatter formatter = new TreeFormatter();
-                formatter.node("Cannot query the value of ");
-                formatter.append(getDisplayName().getDisplayName());
-                formatter.append(" because ");
-                formatter.append(reason);
-                formatter.append(".");
-                throw new IllegalStateException(formatter.toString());
-            }
-        }
-        if (finalizeOnNextGet) {
-            makeFinal();
-            state = State.Final;
+        state.beforeRead(getDisplayName());
+        if (state.isFinalizeOnRead()) {
+            value = finalValue();
+            state = state.finalState();
         }
     }
 
     /**
-     * Call prior to mutating the value of this property.
+     * Call prior to mutating the value of this property, use the default value if no explicit value has been set. Ignores the convention.
      */
-    protected boolean beforeMutate() {
-        if (canMutate()) {
+    protected void useExplicitValue(S defaultValue) {
+        assertCanMutate();
+        value = state.explicitValue(value, defaultValue);
+    }
+
+    /**
+     * Discards the value of this property, and uses its convention.
+     */
+    protected void discardValue() {
+        assertCanMutate();
+        value = state.implicitValue();
+    }
+
+    protected void assertCanMutate() {
+        state.beforeMutate(getDisplayName());
+    }
+
+    private static abstract class FinalizationState<S> {
+        public abstract boolean isNotFinal();
+
+        public abstract FinalizationState<S> finalState();
+
+        abstract void setConvention(S convention);
+
+        public abstract void disallowChanges();
+
+        public abstract void finalizeOnNextGet();
+
+        public abstract void disallowUnsafeRead();
+
+        public abstract S explicitValue(S value);
+
+        public abstract S explicitValue(S value, S defaultValue);
+
+        public abstract S applyConvention(S value, S convention);
+
+        public abstract S implicitValue();
+
+        public abstract void beforeRead(DisplayName displayName);
+
+        public abstract boolean isFinalizeOnRead();
+
+        public abstract void beforeMutate(DisplayName displayName);
+    }
+
+    private static class NonFinalizedValue<S> extends FinalizationState<S> {
+
+        private final PropertyHost host;
+        private State state = State.ImplicitValue;
+        private boolean finalizeOnNextGet;
+        private boolean disallowChanges;
+        private boolean disallowUnsafeRead;
+        private S convention;
+
+        public NonFinalizedValue(PropertyHost host) {
+            this.host = host;
+        }
+
+        @Override
+        public boolean isNotFinal() {
+            return true;
+        }
+
+        @Override
+        public FinalizationState<S> finalState() {
+            return Cast.uncheckedCast(FINALIZED_VALUE);
+        }
+
+        @Override
+        public boolean isFinalizeOnRead() {
+            return finalizeOnNextGet;
+        }
+
+        @Override
+        public void beforeRead(DisplayName displayName) {
+            if (disallowUnsafeRead) {
+                String reason = host.beforeRead();
+                if (reason != null) {
+                    TreeFormatter formatter = new TreeFormatter();
+                    formatter.node("Cannot query the value of ");
+                    formatter.append(displayName.getDisplayName());
+                    formatter.append(" because ");
+                    formatter.append(reason);
+                    formatter.append(".");
+                    throw new IllegalStateException(formatter.toString());
+                }
+            }
+        }
+
+        @Override
+        public void beforeMutate(DisplayName displayName) {
+            if (disallowChanges) {
+                throw new IllegalStateException(String.format("The value for %s cannot be changed any further.", displayName.getDisplayName()));
+            }
+        }
+
+        @Override
+        public void disallowChanges() {
+            disallowChanges = true;
+        }
+
+        @Override
+        public void finalizeOnNextGet() {
+            finalizeOnNextGet = true;
+        }
+
+        @Override
+        public void disallowUnsafeRead() {
+            disallowUnsafeRead = true;
+            finalizeOnNextGet = true;
+        }
+
+        @Override
+        public S explicitValue(S value) {
+            state = State.ExplicitValue;
+            return value;
+        }
+
+        @Override
+        public S explicitValue(S value, S defaultValue) {
             if (state == State.ImplicitValue) {
-                applyDefaultValue();
                 state = State.ExplicitValue;
+                return defaultValue;
             }
-            return true;
+            return value;
         }
-        return false;
-    }
 
-    /**
-     * Call prior to discarding the value of this property.
-     */
-    protected boolean beforeReset() {
-        if (canMutate()) {
+        @Override
+        public S implicitValue() {
             state = State.ImplicitValue;
-            return true;
+            return convention;
         }
-        return false;
+
+        @Override
+        public S applyConvention(S value, S convention) {
+            this.convention = convention;
+            if (state == State.ImplicitValue) {
+                return convention;
+            } else {
+                return value;
+            }
+        }
+
+        @Override
+        void setConvention(S convention) {
+            this.convention = convention;
+        }
     }
 
-    /**
-     * Call prior to applying a convention to this property.
-     */
-    protected boolean shouldApplyConvention() {
-        if (canMutate()) {
-            return state == State.ImplicitValue;
+    private static class FinalizedValue<S> extends FinalizationState<S> {
+        @Override
+        public boolean isNotFinal() {
+            return false;
         }
-        return false;
-    }
 
-    private boolean canMutate() {
-        if (state == State.Final) {
-            throw new IllegalStateException(String.format("The value for %s is final and cannot be changed any further.", getDisplayName().getDisplayName()));
-        } else if (disallowChanges) {
-            throw new IllegalStateException(String.format("The value for %s cannot be changed any further.", getDisplayName().getDisplayName()));
+        @Override
+        public void disallowChanges() {
+            // Finalized, so already cannot change
         }
-        return true;
+
+        @Override
+        public void finalizeOnNextGet() {
+            // Finalized already
+        }
+
+        @Override
+        public void disallowUnsafeRead() {
+            // Finalized so read is safe
+        }
+
+        @Override
+        public void beforeRead(DisplayName displayName) {
+            // Value is available
+        }
+
+        @Override
+        public boolean isFinalizeOnRead() {
+            return false;
+        }
+
+        @Override
+        public void beforeMutate(DisplayName displayName) {
+            throw new IllegalStateException(String.format("The value for %s is final and cannot be changed any further.", displayName.getDisplayName()));
+        }
+
+        @Override
+        public S explicitValue(S value) {
+            throw new UnsupportedOperationException("Should not be called");
+        }
+
+        @Override
+        public S explicitValue(S value, S defaultValue) {
+            throw new UnsupportedOperationException("Should not be called");
+        }
+
+        @Override
+        public S applyConvention(S value, S convention) {
+            throw new UnsupportedOperationException("Should not be called");
+        }
+
+        @Override
+        public S implicitValue() {
+            throw new UnsupportedOperationException("Should not be called");
+        }
+
+        @Override
+        public FinalizationState<S> finalState() {
+            throw new UnsupportedOperationException("Should not be called");
+        }
+
+        @Override
+        void setConvention(S convention) {
+            throw new UnsupportedOperationException("Should not be called");
+        }
     }
 }

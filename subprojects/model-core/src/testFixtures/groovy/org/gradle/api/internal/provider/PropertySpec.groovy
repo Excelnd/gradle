@@ -30,7 +30,9 @@ import java.util.concurrent.Callable
 
 abstract class PropertySpec<T> extends ProviderSpec<T> {
     @Override
-    abstract PropertyInternal<T> providerWithValue(T value)
+    PropertyInternal<T> providerWithValue(T value) {
+        return propertyWithDefaultValue().value(value)
+    }
 
     @Override
     PropertyInternal<T> providerWithNoValue() {
@@ -46,12 +48,6 @@ abstract class PropertySpec<T> extends ProviderSpec<T> {
      * Returns a property with its default value.
      */
     abstract PropertyInternal<T> propertyWithDefaultValue()
-
-    abstract T someValue()
-
-    abstract T someOtherValue()
-
-    abstract Class<T> type()
 
     @Override
     String getDisplayName() {
@@ -1423,7 +1419,7 @@ The value of this property is derived from:
         e.message == 'The value for this property is final and cannot be changed any further.'
 
         when:
-        property.setFromAnyValue(Stub(ProviderInternal))
+        property.setFromAnyValue(brokenSupplier())
 
         then:
         def e2 = thrown(IllegalStateException)
@@ -1452,7 +1448,7 @@ The value of this property is derived from:
         e.message == 'The value for this property cannot be changed any further.'
 
         when:
-        property.setFromAnyValue(Stub(ProviderInternal))
+        property.setFromAnyValue(brokenSupplier())
 
         then:
         def e2 = thrown(IllegalStateException)
@@ -1482,7 +1478,7 @@ The value of this property is derived from:
         e.message == 'The value for this property is final and cannot be changed any further.'
 
         when:
-        property.setFromAnyValue(Stub(ProviderInternal))
+        property.setFromAnyValue(brokenSupplier())
 
         then:
         def e2 = thrown(IllegalStateException)
@@ -1511,7 +1507,7 @@ The value of this property is derived from:
         e.message == 'The value for this property cannot be changed any further.'
 
         when:
-        property.setFromAnyValue(Stub(ProviderInternal))
+        property.setFromAnyValue(brokenSupplier())
 
         then:
         def e2 = thrown(IllegalStateException)
