@@ -1744,6 +1744,51 @@ The value of this property is derived from:
         result2 == someValue()
     }
 
+    def "reports that value is unsafe to read regardless of whether a value is available or not"() {
+        given:
+        def property = propertyWithNoValue()
+        property.disallowUnsafeRead()
+        _ * host.beforeRead() >> "<reason>"
+
+        when:
+        property.get()
+
+        then:
+        def e = thrown(IllegalStateException)
+        e.message == "Cannot query the value of this property because <reason>."
+
+        when:
+        property.set(supplierWithNoValue())
+        property.get()
+
+        then:
+        def e2 = thrown(IllegalStateException)
+        e2.message == "Cannot query the value of this property because <reason>."
+
+        when:
+        property.set(brokenSupplier())
+        property.get()
+
+        then:
+        def e3 = thrown(IllegalStateException)
+        e3.message == "Cannot query the value of this property because <reason>."
+    }
+
+    def "can read value of finalized property when host is not ready and unsafe read disallowed"() {
+        given:
+        def property = propertyWithDefaultValue()
+        property.disallowUnsafeRead()
+        property.set(someValue())
+        property.finalizeValue()
+
+        when:
+        def result = property.get()
+
+        then:
+        result == someValue()
+        0 * host._
+    }
+
     def "cannot set value after value read when unsafe read disallowed"() {
         given:
         def property = propertyWithDefaultValue()
