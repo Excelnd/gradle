@@ -16,6 +16,9 @@
 
 package org.gradle.internal.vfs.impl;
 
+import com.google.common.collect.EnumMultiset;
+import com.google.common.collect.Multiset;
+import org.gradle.internal.file.FileType;
 import org.gradle.internal.vfs.WatchingVirtualFileSystem;
 import org.gradle.internal.vfs.watch.FileWatcherRegistry;
 import org.gradle.internal.vfs.watch.FileWatcherRegistryFactory;
@@ -28,8 +31,6 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 
 public class DefaultWatchingVirtualFileSystem extends AbstractDelegatingVirtualFileSystem implements WatchingVirtualFileSystem, Closeable {
@@ -57,7 +58,19 @@ public class DefaultWatchingVirtualFileSystem extends AbstractDelegatingVirtualF
         }
         try {
             long startTime = System.currentTimeMillis();
-            watchRegistry = watcherRegistryFactory.startWatching(getRoot(), watchFilter, mustWatchDirectories);
+            watchRegistry = watcherRegistryFactory.startWatching(getRoot(), watchFilter, mustWatchDirectories, new FileWatcherRegistry.ChangeHandler() {
+                @Override
+                public void handleChange(FileWatcherRegistry.Type type, Path path) {
+                    LOGGER.debug("Handling VFS change {} {}", type, path);
+                    update(Collections.singleton(path.toString()), () -> {});
+                }
+
+                @Override
+                public void handleLostState() {
+                    LOGGER.warn("Dropped VFS state due to lost state");
+                    invalidateAll();
+                }
+            });
             long endTime = System.currentTimeMillis() - startTime;
             LOGGER.warn("Spent {} ms registering watches for file system events", endTime);
         } catch (Exception ex) {
@@ -73,27 +86,13 @@ public class DefaultWatchingVirtualFileSystem extends AbstractDelegatingVirtualF
             return;
         }
 
-        AtomicInteger count = new AtomicInteger();
-        AtomicBoolean unknownEventEncountered = new AtomicBoolean();
         try {
             long startTime = System.currentTimeMillis();
-            watchRegistry.stopWatching(new FileWatcherRegistry.ChangeHandler() {
-                @Override
-                public void handleChange(FileWatcherRegistry.Type type, Path path) {
-                    count.incrementAndGet();
-                    LOGGER.debug("Handling VFS change {} {}", type, path);
-                    update(Collections.singleton(path.toString()), () -> {});
-                }
-
-                @Override
-                public void handleLostState() {
-                    unknownEventEncountered.set(true);
-                    LOGGER.warn("Dropped VFS state due to lost state");
-                    invalidateAll();
-                }
-            });
-            if (!unknownEventEncountered.get()) {
-                LOGGER.warn("Received {} file system events since last build", count);
+            FileWatcherRegistry.FileWatchingStatistics statistics = watchRegistry.stopWatching();
+            if (statistics.isUnknownEventEncountered()) {
+                LOGGER.warn("Dropped VFS state due to lost state");
+            } else {
+                LOGGER.warn("Received {} file system events since last build", statistics.getNumberOfReceivedEvents());
             }
             LOGGER.warn("Spent {} ms processing file system events since last build", System.currentTimeMillis() - startTime);
         } catch (IOException ex) {
@@ -101,6 +100,26 @@ public class DefaultWatchingVirtualFileSystem extends AbstractDelegatingVirtualF
             invalidateAll();
         } finally {
             close();
+        }
+    }
+
+    @Override
+    public VirtualFileSystemStatistics getStatistics() {
+        EnumMultiset<FileType> retained = EnumMultiset.create(FileType.class);
+        getRoot().visitSnapshots((snapshot, rootOfCompleteHierarchy) -> retained.add(snapshot.getType()));
+        return new DefaultVirtualFileSystemStatistics(retained);
+    }
+
+    private static class DefaultVirtualFileSystemStatistics implements VirtualFileSystemStatistics {
+        private final Multiset<FileType> retained;
+
+        public DefaultVirtualFileSystemStatistics(Multiset<FileType> retained) {
+            this.retained = retained;
+        }
+
+        @Override
+        public int getRetained(FileType fileType) {
+            return retained.count(fileType);
         }
     }
 

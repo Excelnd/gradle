@@ -244,7 +244,7 @@ class TaskDependencyInferenceIntegrationTest extends AbstractIntegrationSpec imp
         result.assertTasksExecuted(":b", ":c")
     }
 
-    def "dependency declared using orElse provider whose original value is missing and  alternative value is constant does not imply task dependency"() {
+    def "dependency declared using orElse provider whose original value is missing and alternative value is constant does not imply task dependency"() {
         taskTypeWithOutputFileProperty()
         buildFile << """
             def taskA = tasks.create("a", FileProducer) {
@@ -533,6 +533,52 @@ The following types/formats are supported:
         then:
         result.assertTasksExecuted(":a", ":b")
         file("out.txt").text == "1"
+    }
+
+    @ToBeFixedForInstantExecution
+    def "input file collection containing filtered tree of task output implies dependency on the task"() {
+        taskTypeWithOutputDirectoryProperty()
+        taskTypeWithInputFileCollection()
+        buildFile << """
+            def task = tasks.create("a", DirProducer) {
+                output = layout.buildDirectory.dir('dir')
+                names = ['a.txt', 'b.txt', 'c.txt']
+            }
+            tasks.register("b", InputFilesTask) {
+                inFiles.from task.output.map { it.asFileTree.matching { include 'a.*'; include 'c.txt' } }
+                outFile = file("out.txt")
+            }
+        """
+
+        when:
+        run("b")
+
+        then:
+        result.assertTasksExecuted(":a", ":b")
+        file("out.txt").text == "content,content"
+    }
+
+    def "input file collection containing filtered tree containing task output implies dependency on the task"() {
+        taskTypeWithOutputDirectoryProperty()
+        taskTypeWithInputFileCollection()
+        buildFile << """
+            def task = tasks.create("a", DirProducer) {
+                output = layout.buildDirectory.dir('dir')
+                names = ['a.txt', 'b.txt', 'c.txt']
+            }
+            def tree = project.files(task.output).asFileTree
+            tasks.register("b", InputFilesTask) {
+                inFiles.from tree.matching { include 'a.*'; include 'c.txt' }
+                outFile = file("out.txt")
+            }
+        """
+
+        when:
+        run("b")
+
+        then:
+        result.assertTasksExecuted(":a", ":b")
+        file("out.txt").text == "content,content"
     }
 
     def "input file property with value of mapped task provider implies dependency on a specific output of the task"() {
@@ -824,7 +870,7 @@ The following types/formats are supported:
 
     def "input property with value of mapped task output implies dependency on the task"() {
         taskTypeWithOutputFileProperty()
-        taskTypeWithInputProperty()
+        taskTypeWithIntInputProperty()
         buildFile << """
             def task = tasks.create("a", FileProducer) {
                 output = file("file.txt")
@@ -866,7 +912,7 @@ The following types/formats are supported:
 
     def "input property with value of mapped task output location does not imply dependency on the task"() {
         taskTypeWithOutputFileProperty()
-        taskTypeWithInputProperty()
+        taskTypeWithIntInputProperty()
         buildFile << """
             def task = tasks.create("a", FileProducer) {
                 output = file("file.txt")
@@ -887,7 +933,7 @@ The following types/formats are supported:
     }
 
     def "input property can have value of mapped output property of same task"() {
-        taskTypeWithInputProperty()
+        taskTypeWithIntInputProperty()
         buildFile << """
             tasks.register("b", InputTask) {
                 inValue = outFile.locationOnly.map { it.asFile.name.length() }

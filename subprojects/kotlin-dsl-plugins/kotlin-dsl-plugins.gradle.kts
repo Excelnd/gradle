@@ -20,6 +20,8 @@ import codegen.GenerateKotlinDslPluginsExtensions
 import org.gradle.gradlebuild.test.integrationtests.IntegrationTest
 import org.gradle.gradlebuild.unittestandcompile.ModuleType
 import plugins.bundledGradlePlugin
+import org.gradle.gradlebuild.testing.integrationtests.cleanup.WhenNotEmpty
+
 
 plugins {
     `kotlin-dsl-plugin-bundle`
@@ -45,6 +47,15 @@ val generateSources by tasks.registering(GenerateKotlinDslPluginsExtensions::cla
 
 sourceSets.main {
     kotlin.srcDir(files(generatedSourcesDir).builtBy(generateSources))
+}
+
+configurations {
+    compileOnly {
+        attributes {
+            attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.LIBRARY))
+            attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.JAR))
+        }
+    }
 }
 
 dependencies {
@@ -135,6 +146,6 @@ tasks.noDaemonIntegTest {
 }
 
 // TODO:kotlin-dsl
-tasks.verifyTestFilesCleanup {
-    enabled = false
+testFilesCleanup {
+    policy.set(WhenNotEmpty.REPORT)
 }

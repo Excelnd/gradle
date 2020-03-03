@@ -1,24 +1,41 @@
 import build.futureKotlin
 import org.gradle.gradlebuild.unittestandcompile.ModuleType
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     `kotlin-library`
 }
 
 tasks {
+
+    withType<KotlinCompile>().configureEach {
+        kotlinOptions {
+            freeCompilerArgs += listOf(
+                "-XXLanguage:+NewInference",
+                "-XXLanguage:+SamConversionForKotlinFunctions"
+            )
+        }
+    }
+
     processResources {
         from({ project(":instantExecutionReport").tasks.named("assembleReport") }) {
             into("org/gradle/instantexecution")
         }
     }
+
+    instantIntegTest {
+        enabled = false
+    }
 }
 
 dependencies {
     implementation(project(":baseServices"))
+    implementation(project(":baseServicesGroovy"))
     implementation(project(":messaging"))
     implementation(project(":logging"))
     implementation(project(":coreApi"))
     implementation(project(":core"))
+    implementation(project(":resources"))
     implementation(project(":snapshots"))
     implementation(project(":modelCore"))
     implementation(project(":fileCollections"))
@@ -30,6 +47,7 @@ dependencies {
     // TODO - it might be good to allow projects to contribute state to save and restore, rather than have this project know about everything
     implementation(project(":toolingApi"))
     implementation(project(":buildEvents"))
+    implementation(project(":native"))
 
     implementation(library("groovy"))
     implementation(library("slf4j_api"))
@@ -40,9 +58,9 @@ dependencies {
 
     testImplementation(testFixtures(project(":core")))
     testImplementation(testLibrary("mockito_kotlin2"))
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-debug:1.3.3")
 
     testRuntimeOnly(project(":runtimeApiInfo"))
-    testRuntimeOnly(kotlin("reflect"))
 
     integTestImplementation(project(":jvmServices"))
     integTestImplementation(project(":toolingApi"))
@@ -64,11 +82,4 @@ dependencies {
 
 gradlebuildJava {
     moduleType = ModuleType.CORE
-}
-
-
-tasks {
-    instantIntegTest {
-        enabled = false
-    }
 }

@@ -49,6 +49,7 @@ import org.gradle.util.TestUtil;
 
 import javax.annotation.Nullable;
 import java.io.File;
+import java.util.List;
 
 import static org.gradle.internal.snapshot.CaseSensitivity.CASE_INSENSITIVE;
 import static org.gradle.internal.snapshot.CaseSensitivity.CASE_SENSITIVE;
@@ -57,6 +58,18 @@ public class TestFiles {
     private static final FileSystem FILE_SYSTEM = NativeServicesTestFixture.getInstance().get(FileSystem.class);
     private static final DefaultFileLookup FILE_LOOKUP = new DefaultFileLookup(PatternSets.getNonCachingPatternSetFactory());
     private static final DefaultExecActionFactory EXEC_FACTORY = DefaultExecActionFactory.of(resolver(), fileCollectionFactory(), new DefaultExecutorFactory());
+
+    public static FileCollectionInternal empty() {
+        return fileCollectionFactory().empty();
+    }
+
+    public static FileCollectionInternal fixed(File... files) {
+        return fileCollectionFactory().fixed(files);
+    }
+
+    public static FileCollectionInternal fixed(List<File> files) {
+        return fileCollectionFactory().fixed(files);
+    }
 
     public static FileLookup fileLookup() {
         return FILE_LOOKUP;
@@ -104,6 +117,14 @@ public class TestFiles {
 
     public static Deleter deleter() {
         return new DefaultDeleter(Time.clock()::getCurrentTime, fileSystem()::isSymlink, false);
+    }
+
+    public static FilePropertyFactory filePropertyFactory() {
+        return new DefaultFilePropertyFactory(resolver(), fileCollectionFactory());
+    }
+
+    public static FilePropertyFactory filePropertyFactory(File baseDir) {
+        return new DefaultFilePropertyFactory(resolver(baseDir), fileCollectionFactory(baseDir));
     }
 
     public static FileFactory fileFactory() {
@@ -169,11 +190,11 @@ public class TestFiles {
     }
 
     public static FileCollectionFactory fileCollectionFactory() {
-        return new DefaultFileCollectionFactory(pathToFileResolver(), DefaultTaskDependencyFactory.withNoAssociatedProject(), directoryFileTreeFactory(), getPatternSetFactory());
+        return new DefaultFileCollectionFactory(pathToFileResolver(), DefaultTaskDependencyFactory.withNoAssociatedProject(), directoryFileTreeFactory(), getPatternSetFactory(), fileSystem());
     }
 
     public static FileCollectionFactory fileCollectionFactory(File baseDir) {
-        return new DefaultFileCollectionFactory(pathToFileResolver(baseDir), DefaultTaskDependencyFactory.withNoAssociatedProject(), directoryFileTreeFactory(), getPatternSetFactory());
+        return new DefaultFileCollectionFactory(pathToFileResolver(baseDir), DefaultTaskDependencyFactory.withNoAssociatedProject(), directoryFileTreeFactory(), getPatternSetFactory(), fileSystem());
     }
 
     public static ExecFactory execFactory() {

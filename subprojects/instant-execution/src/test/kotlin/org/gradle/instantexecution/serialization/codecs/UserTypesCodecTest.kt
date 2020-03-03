@@ -124,7 +124,7 @@ class UserTypesCodecTest {
         assertThat(
             "preserves identities across protocols",
             decodedSerializable.value,
-            sameInstance<Any>(decodedBean)
+            sameInstance(decodedBean)
         )
     }
 
@@ -181,7 +181,7 @@ class UserTypesCodecTest {
         val beanTrace = assertInstanceOf<PropertyTrace.Bean>(fieldTrace.trace)
         assertThat(
             beanTrace.type,
-            sameInstance<Class<*>>(bean.javaClass)
+            sameInstance(bean.javaClass)
         )
     }
 
@@ -198,6 +198,28 @@ class UserTypesCodecTest {
             problem.message.toString(),
             equalTo("objects of type 'kotlin.Pair' are not yet supported with instant execution.")
         )
+    }
+
+    @Test
+    fun `can handle anonymous enum subtypes`() {
+        EnumSuperType.values().forEach {
+            assertThat(
+                roundtrip(it),
+                sameInstance(it)
+            )
+        }
+    }
+
+    enum class EnumSuperType {
+
+        SubType1 {
+            override fun displayName() = "one"
+        },
+        SubType2 {
+            override fun displayName() = "two"
+        };
+
+        abstract fun displayName(): String
     }
 
     private
@@ -389,7 +411,10 @@ class UserTypesCodecTest {
         actionScheme = mock(),
         attributesFactory = mock(),
         transformListener = mock(),
-        valueSourceProviderFactory = mock()
+        valueSourceProviderFactory = mock(),
+        patternSetFactory = mock(),
+        fileSystem = mock(),
+        fileFactory = mock()
     )
 
     @Test
@@ -397,7 +422,7 @@ class UserTypesCodecTest {
 
         assertThat(
             Peano.fromInt(0),
-            equalTo<Peano>(Peano.Zero)
+            equalTo(Peano.Z)
         )
 
         assertThat(
@@ -410,20 +435,24 @@ class UserTypesCodecTest {
 
         companion object {
 
-            fun fromInt(n: Int): Peano = (0 until n).fold(Zero as Peano) { acc, _ -> Succ(acc) }
+            fun fromInt(n: Int): Peano = (0 until n).fold(Z as Peano) { acc, _ -> S(acc) }
         }
 
         fun toInt(): Int = sequence().count() - 1
 
-        object Zero : Peano()
+        object Z : Peano() {
+            override fun toString() = "Z"
+        }
 
-        data class Succ(val n: Peano) : Peano()
+        data class S(val n: Peano) : Peano() {
+            override fun toString() = "S($n)"
+        }
 
         private
         fun sequence() = generateSequence(this) { previous ->
             when (previous) {
-                is Zero -> null
-                is Succ -> previous.n
+                is Z -> null
+                is S -> previous.n
             }
         }
     }

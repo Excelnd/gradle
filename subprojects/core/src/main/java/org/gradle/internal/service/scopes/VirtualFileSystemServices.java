@@ -46,6 +46,7 @@ import org.gradle.initialization.layout.ProjectCacheDir;
 import org.gradle.internal.classloader.ClasspathHasher;
 import org.gradle.internal.event.ListenerManager;
 import org.gradle.internal.execution.OutputChangeListener;
+import org.gradle.internal.file.FileType;
 import org.gradle.internal.file.PathToFileResolver;
 import org.gradle.internal.file.Stat;
 import org.gradle.internal.fingerprint.FileCollectionFingerprinter;
@@ -77,6 +78,7 @@ import org.gradle.internal.vfs.DarwinFileWatcherRegistry;
 import org.gradle.internal.vfs.RoutingVirtualFileSystem;
 import org.gradle.internal.vfs.VirtualFileSystem;
 import org.gradle.internal.vfs.WatchingVirtualFileSystem;
+import org.gradle.internal.vfs.WatchingVirtualFileSystem.VirtualFileSystemStatistics;
 import org.gradle.internal.vfs.WindowsFileWatcherRegistry;
 import org.gradle.internal.vfs.impl.DefaultVirtualFileSystem;
 import org.gradle.internal.vfs.impl.DefaultWatchingVirtualFileSystem;
@@ -102,12 +104,12 @@ public class VirtualFileSystemServices extends AbstractPluginServiceRegistry {
     private static final Logger LOGGER = LoggerFactory.getLogger(VirtualFileSystemServices.class);
 
     /**
-     * System property to enable partial invalidation.
+     * Boolean system property to enable partial invalidation.
      */
     public static final String VFS_PARTIAL_INVALIDATION_ENABLED_PROPERTY = "org.gradle.unsafe.vfs.partial-invalidation";
 
     /**
-     * System property to enable retaining VFS state between builds.
+     * Boolean system property to enable retaining VFS state between builds.
      *
      * Also enables partial VFS invalidation.
      *
@@ -131,12 +133,12 @@ public class VirtualFileSystemServices extends AbstractPluginServiceRegistry {
     public static final String VFS_DROP_PROPERTY = "org.gradle.unsafe.vfs.drop";
 
     public static boolean isPartialInvalidationEnabled(Map<String, String> systemPropertiesArgs) {
-        return getSystemProperty(VFS_PARTIAL_INVALIDATION_ENABLED_PROPERTY, systemPropertiesArgs) != null
+        return isSystemPropertyEnabled(VFS_PARTIAL_INVALIDATION_ENABLED_PROPERTY, systemPropertiesArgs)
             || isRetentionEnabled(systemPropertiesArgs);
     }
 
     public static boolean isRetentionEnabled(Map<String, String> systemPropertiesArgs) {
-        return getSystemProperty(VFS_RETENTION_ENABLED_PROPERTY, systemPropertiesArgs) != null;
+        return isSystemPropertyEnabled(VFS_RETENTION_ENABLED_PROPERTY, systemPropertiesArgs);
     }
 
     public static List<File> getChangedPathsSinceLastBuild(PathToFileResolver resolver, Map<String, String> systemPropertiesArgs) {
@@ -148,6 +150,11 @@ public class VirtualFileSystemServices extends AbstractPluginServiceRegistry {
             .filter(path -> !path.isEmpty())
             .map(resolver::resolve)
             .collect(Collectors.toList());
+    }
+
+    private static boolean isSystemPropertyEnabled(String systemProperty, Map<String, String> systemPropertiesArgs) {
+        String value = getSystemProperty(systemProperty, systemPropertiesArgs);
+        return value != null && !"false".equalsIgnoreCase(value);
     }
 
     @Nullable
@@ -210,7 +217,7 @@ public class VirtualFileSystemServices extends AbstractPluginServiceRegistry {
                     fileSystem.isCaseSensitive() ? CASE_SENSITIVE : CASE_INSENSITIVE,
                     DirectoryScanner.getDefaultExcludes()
                 ),
-                path -> !additiveCacheLocations.isInsideAdditiveCache(path.toString())
+                path -> !additiveCacheLocations.isInsideAdditiveCache(path)
             );
             listenerManager.addListener(new RootBuildLifecycleListener() {
                 @Override
@@ -222,7 +229,7 @@ public class VirtualFileSystemServices extends AbstractPluginServiceRegistry {
                         FileResolver fileResolver = new BaseDirFileResolver(startParameter.getCurrentDir(), () -> {
                             throw new UnsupportedOperationException();
                         });
-                        if (getSystemProperty(VFS_DROP_PROPERTY, systemPropertiesArgs) != null) {
+                        if (isSystemPropertyEnabled(VFS_DROP_PROPERTY, systemPropertiesArgs)) {
                             virtualFileSystem.invalidateAll();
                         } else {
                             List<File> changedPathsSinceLastBuild = getChangedPathsSinceLastBuild(fileResolver, systemPropertiesArgs);
@@ -241,12 +248,28 @@ public class VirtualFileSystemServices extends AbstractPluginServiceRegistry {
                         virtualFileSystem.invalidateAll();
                     }
                     virtualFileSystem.stopWatching();
+                    if (isRetentionEnabled(systemPropertiesArgs)) {
+                        VirtualFileSystemStatistics statistics = virtualFileSystem.getStatistics();
+                        LOGGER.warn(
+                            "Virtual file system retained information about {} files, {} directories and {} missing files since last build",
+                            statistics.getRetained(FileType.RegularFile),
+                            statistics.getRetained(FileType.Directory),
+                            statistics.getRetained(FileType.Missing)
+                        );
+                    }
                 }
 
                 @Override
                 public void beforeComplete(GradleInternal gradle) {
                     if (isRetentionEnabled(gradle.getStartParameter().getSystemPropertiesArgs())) {
                         virtualFileSystem.startWatching(Collections.singleton(gradle.getRootProject().getProjectDir()));
+                        VirtualFileSystemStatistics statistics = virtualFileSystem.getStatistics();
+                        LOGGER.warn(
+                            "Virtual file system retains information about {} files, {} directories and {} missing files till next build",
+                            statistics.getRetained(FileType.RegularFile),
+                            statistics.getRetained(FileType.Directory),
+                            statistics.getRetained(FileType.Missing)
+                        );
                     } else {
                         virtualFileSystem.invalidateAll();
                     }

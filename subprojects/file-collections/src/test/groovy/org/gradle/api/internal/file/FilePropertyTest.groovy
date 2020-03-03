@@ -38,12 +38,12 @@ class FilePropertyTest extends FileSystemPropertySpec<RegularFile> {
 
     @Override
     RegularFile someOtherValue2() {
-        return baseDir.file("other1").get()
+        return baseDir.file("other2").get()
     }
 
     @Override
     RegularFile someOtherValue3() {
-        return baseDir.file("other1").get()
+        return baseDir.file("other3").get()
     }
 
     @Override
@@ -63,6 +63,6 @@ class FilePropertyTest extends FileSystemPropertySpec<RegularFile> {
 
     @Override
     ManagedFactory managedFactory() {
-        new ManagedFactories.RegularFilePropertyManagedFactory(resolver)
+        new ManagedFactories.RegularFilePropertyManagedFactory(factory)
     }
 }

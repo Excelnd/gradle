@@ -22,7 +22,8 @@ import org.gradle.api.internal.provider.HasConfigurableValueInternal;
 import org.gradle.api.internal.tasks.DefaultTaskDependency;
 import org.gradle.api.internal.tasks.TaskDependencyFactory;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
-import org.gradle.api.tasks.util.internal.PatternSets;
+import org.gradle.api.tasks.util.PatternSet;
+import org.gradle.internal.Factory;
 import org.gradle.internal.deprecation.DeprecationLogger;
 import org.gradle.internal.file.PathToFileResolver;
 import org.gradle.internal.state.Managed;
@@ -51,7 +52,8 @@ public class DefaultConfigurableFileCollection extends CompositeFileCollection i
     private State state = State.Mutable;
     private boolean disallowChanges;
 
-    public DefaultConfigurableFileCollection(@Nullable String displayName, PathToFileResolver fileResolver, TaskDependencyFactory dependencyFactory, Collection<?> files) {
+    public DefaultConfigurableFileCollection(@Nullable String displayName, PathToFileResolver fileResolver, TaskDependencyFactory dependencyFactory, Factory<PatternSet> patternSetFactory, Collection<?> files) {
+        super(patternSetFactory);
         this.displayName = displayName;
         this.resolver = fileResolver;
         this.files = new LinkedHashSet<>();
@@ -148,6 +150,7 @@ public class DefaultConfigurableFileCollection extends CompositeFileCollection i
             throw new IllegalStateException("The value for " + displayNameForThisCollection() + " cannot be changed.");
         } else if (state == State.Final) {
             DeprecationLogger.deprecateAction("Changing the value for a FileCollection with a final value")
+                .willBecomeAnErrorInGradle7()
                 .withUserManual("lazy_configuration", "unmodifiable_property")
                 .nagUser();
             return false;
@@ -178,7 +181,7 @@ public class DefaultConfigurableFileCollection extends CompositeFileCollection i
     }
 
     private void calculateFinalizedValue() {
-        DefaultFileCollectionResolveContext context = new DefaultFileCollectionResolveContext(PatternSets.getNonCachingPatternSetFactory());
+        DefaultFileCollectionResolveContext context = new DefaultFileCollectionResolveContext(patternSetFactory);
         UnpackingVisitor nested = new UnpackingVisitor(context, resolver);
         nested.add(files);
         files.clear();

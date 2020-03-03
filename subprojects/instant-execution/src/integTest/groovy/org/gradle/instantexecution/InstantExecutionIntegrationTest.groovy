@@ -76,15 +76,22 @@ class InstantExecutionIntegrationTest extends AbstractInstantExecutionIntegratio
     def "instant execution for help on empty project"() {
         given:
         instantRun "help"
-        def firstRunOutput = result.normalizedOutput.replace('Calculating task graph as no instant execution cache is available for tasks: help', '')
+        def firstRunOutput = result.normalizedOutput
+            .replaceAll(/Calculating task graph as no instant execution cache is available for tasks: help\n/, '')
+            .replaceAll(/Watching \d+ (directory hierarchies to track changes between builds in \d+ directories|directories to track changes between builds)\n/, '')
+            .replaceAll(/Spent \d+ ms registering watches for file system events\n/, '')
 
         when:
         instantRun "help"
+        def secondRunOutput = result.normalizedOutput
+            .replaceAll(/Reusing instant execution cache. This is not guaranteed to work in any way.\n/, '')
+            .replaceAll(/Received \d+ file system events since last build\n/, '')
+            .replaceAll(/Spent \d+ ms processing file system events since last build\n/, '')
+            .replaceAll(/Watching \d+ (directory hierarchies to track changes between builds in \d+ directories|directories to track changes between builds)\n/, '')
+            .replaceAll(/Spent \d+ ms registering watches for file system events\n/, '')
 
         then:
-        firstRunOutput == result.normalizedOutput
-            .replace('Reusing instant execution cache. This is not guaranteed to work in any way.', '')
-            .replaceAll('Received \\d* file system events since last build\n', '')
+        firstRunOutput == secondRunOutput
     }
 
     def "restores some details of the project structure"() {
@@ -92,6 +99,14 @@ class InstantExecutionIntegrationTest extends AbstractInstantExecutionIntegratio
 
         settingsFile << """
             rootProject.name = 'thing'
+            include 'a', 'b', 'c'
+            include 'a:b'
+            project(':a:b').projectDir = file('custom')
+            gradle.rootProject {
+                allprojects {
+                    task thing
+                }
+            }
         """
 
         when:
@@ -100,6 +115,8 @@ class InstantExecutionIntegrationTest extends AbstractInstantExecutionIntegratio
         then:
         def event = fixture.first(LoadProjectsBuildOperationType)
         event.result.rootProject.name == 'thing'
+        event.result.rootProject.path == ':'
+        event.result.rootProject.children.size() == 3 // All projects are created when storing
 
         when:
         instantRun "help"
@@ -107,6 +124,59 @@ class InstantExecutionIntegrationTest extends AbstractInstantExecutionIntegratio
         then:
         def event2 = fixture.first(LoadProjectsBuildOperationType)
         event2.result.rootProject.name == 'thing'
+        event2.result.rootProject.path == ':'
+        event2.result.rootProject.projectDir == testDirectory.absolutePath
+        event2.result.rootProject.children.empty // None of the child projects are created when loading, as they have no tasks scheduled
+
+        when:
+        instantRun ":a:thing"
+
+        then:
+        def event3 = fixture.first(LoadProjectsBuildOperationType)
+        event3.result.rootProject.name == 'thing'
+        event3.result.rootProject.children.size() == 3 // All projects are created when storing
+
+        when:
+        instantRun ":a:thing"
+
+        then:
+        def event4 = fixture.first(LoadProjectsBuildOperationType)
+        event4.result.rootProject.name == 'thing'
+        event4.result.rootProject.path == ':'
+        event4.result.rootProject.projectDir == testDirectory.absolutePath
+        event4.result.rootProject.children.size() == 1 // Only project a is created when loading
+        def project1 = event4.result.rootProject.children.first()
+        project1.name == 'a'
+        project1.path == ':a'
+        project1.projectDir == file('a').absolutePath
+        project1.children.empty
+
+        when:
+        instantRun ":a:b:thing"
+
+        then:
+        def event5 = fixture.first(LoadProjectsBuildOperationType)
+        event5.result.rootProject.name == 'thing'
+        event5.result.rootProject.children.size() == 3 // All projects are created when storing
+
+        when:
+        instantRun ":a:b:thing"
+
+        then:
+        def event6 = fixture.first(LoadProjectsBuildOperationType)
+        event6.result.rootProject.name == 'thing'
+        event6.result.rootProject.path == ':'
+        event6.result.rootProject.projectDir == testDirectory.absolutePath
+        event6.result.rootProject.children.size() == 1
+        def project3 = event6.result.rootProject.children.first()
+        project3.name == 'a'
+        project3.path == ':a'
+        project3.projectDir == file('a').absolutePath
+        project3.children.size() == 1
+        def project4 = project3.children.first()
+        project4.name == 'b'
+        project4.path == ':a:b'
+        project4.projectDir == file('custom').absolutePath
     }
 
     def "does not configure build when task graph is already cached for requested tasks"() {
@@ -650,6 +720,50 @@ class InstantExecutionIntegrationTest extends AbstractInstantExecutionIntegratio
     }
 
     @Unroll
+    def "Directory value can resolve paths after being restored"() {
+        buildFile << """
+            import ${Inject.name}
+
+            class SomeTask extends DefaultTask {
+                @Internal
+                Directory value
+                @Internal
+                final Property<Directory> propValue
+
+                @Inject
+                SomeTask(ObjectFactory objects) {
+                    propValue = objects.directoryProperty()
+                }
+
+                @TaskAction
+                void run() {
+                    println "value = " + value
+                    println "value.child = " + value.dir("child")
+                    println "propValue = " + propValue.get()
+                    println "propValue.child = " + propValue.get().dir("child")
+                    println "propValue.child.mapped = " + propValue.dir("child").get()
+                }
+            }
+
+            task ok(type: SomeTask) {
+                value = layout.projectDir.dir("dir1")
+                propValue = layout.projectDir.dir("dir2")
+            }
+        """
+
+        when:
+        instantRun "ok"
+        instantRun "ok"
+
+        then:
+        outputContains("value = ${file("dir1")}")
+        outputContains("value.child = ${file("dir1/child")}")
+        outputContains("propValue = ${file("dir2")}")
+        outputContains("propValue.child = ${file("dir2/child")}")
+        outputContains("propValue.child.mapped = ${file("dir2/child")}")
+    }
+
+    @Unroll
     def "restores task fields whose value is FileCollection"() {
         buildFile << """
             import ${Inject.name}
@@ -758,6 +872,53 @@ class InstantExecutionIntegrationTest extends AbstractInstantExecutionIntegratio
         kind                     | expression
         "instance capturing"     | "setInstanceCapturingLambda()"
         "non-instance capturing" | "setNonInstanceCapturingLambda()"
+    }
+
+    @Unroll
+    def "restores task fields whose value is #kind TextResource"() {
+
+        given:
+        file("resource.txt") << 'content'
+        createZip("resource.zip") {
+            file("resource.txt") << 'content'
+        }
+
+        and:
+        buildFile << """
+
+            class SomeTask extends DefaultTask {
+
+                @Input
+                TextResource textResource = project.resources.text.$expression
+
+                @TaskAction
+                def action() {
+                    println('> ' + textResource.asString())
+                }
+            }
+
+            tasks.register("someTask", SomeTask)
+        """
+
+        when:
+        instantRun 'someTask'
+
+        then:
+        outputContains("> content")
+
+        when:
+        instantRun 'someTask'
+
+        then:
+        outputContains("> content")
+
+        where:
+        kind               | expression
+        'a string'         | 'fromString("content")'
+        'a file'           | 'fromFile("resource.txt")'
+        'an uri'           | 'fromUri(project.uri(project.file("resource.txt")))'
+        'an insecure uri'  | 'fromInsecureUri(project.uri(project.file("resource.txt")))'
+        'an archive entry' | 'fromArchiveEntry("resource.zip", "resource.txt")'
     }
 
     @Unroll

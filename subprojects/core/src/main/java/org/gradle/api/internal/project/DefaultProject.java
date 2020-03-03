@@ -44,6 +44,7 @@ import org.gradle.api.file.CopySpec;
 import org.gradle.api.file.DeleteSpec;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.FileTree;
+import org.gradle.api.file.ProjectLayout;
 import org.gradle.api.internal.CollectionCallbackActionDecorator;
 import org.gradle.api.internal.DynamicObjectAware;
 import org.gradle.api.internal.GradleInternal;
@@ -258,6 +259,12 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
 
     @SuppressWarnings("unused")
     static class BasicServicesRules extends RuleSource {
+        @Hidden
+        @Model
+        ProjectLayout projectLayoutService(ServiceRegistry serviceRegistry) {
+            return serviceRegistry.get(ProjectLayout.class);
+        }
+
         @Hidden
         @Model
         ObjectFactory objectFactory(ServiceRegistry serviceRegistry) {
@@ -1019,6 +1026,7 @@ public class DefaultProject extends AbstractPluginAware implements ProjectIntern
         if (!state.isUnconfigured() && !state.isConfiguring()) {
             DeprecationLogger.deprecateInvocation("Project." + methodPrototype + " when the project is already evaluated")
                 .withAdvice(getAdviceOnDeprecationOfAfterEvaluateAfterProjectIsEvaluated())
+                .willBecomeAnErrorInGradle7()
                 .withUpgradeGuideSection(5, "calling_project_afterevaluate_on_an_evaluated_project_has_been_deprecated")
                 .nagUser();
         }
