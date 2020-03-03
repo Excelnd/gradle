@@ -198,7 +198,7 @@ afterEvaluate {
     try {
         thing.prop.set("ignore me")
     } catch(IllegalStateException e) {
-        println("set failed with: \${e.message}")
+        println("set after read failed with: \${e.message}")
     }
 }
 
@@ -214,7 +214,7 @@ task show {
 
         then:
         outputContains("get failed with: Cannot query the value of extension 'thing' property 'prop' because configuration of root project 'broken' has not finished yet.")
-        outputContains("set failed with: The value for extension 'thing' property 'prop' is final and cannot be changed any further.")
+        outputContains("set after read failed with: The value for extension 'thing' property 'prop' is final and cannot be changed any further.")
         output.count("value = 123") == 2
     }
 
@@ -251,7 +251,6 @@ task show {
 
         then:
         outputContains("set failed with: The value for extension 'thing' property 'prop' is final and cannot be changed any further.")
-        outputContains("value = 123")
-        outputContains("value = 123")
+        output.count("value = 123") == 2
     }
 }

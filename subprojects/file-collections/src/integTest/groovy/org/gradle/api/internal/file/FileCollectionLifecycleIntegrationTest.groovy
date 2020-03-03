@@ -198,7 +198,7 @@ class FileCollectionLifecycleIntegrationTest extends AbstractIntegrationSpec imp
                 try {
                     thing.prop.from("ignore me")
                 } catch(IllegalStateException e) {
-                    println("set failed with: \${e.message}")
+                    println("set after read failed with: \${e.message}")
                 }
             }
 
@@ -216,6 +216,42 @@ class FileCollectionLifecycleIntegrationTest extends AbstractIntegrationSpec imp
         then:
         outputContains("get files failed with: Cannot query the value for this file collection because configuration of root project 'broken' has not finished yet.")
         outputContains("get failed with: Cannot query the value for this file collection because configuration of root project 'broken' has not finished yet.")
+        outputContains("set after read failed with: The value for this file collection is final and cannot be changed.")
+        output.count("value = [${file('some-file')}]") == 2
+    }
+
+    def "can change value of strict file collection after afterEvaluate starts and before the value has been read"() {
+        given:
+        settingsFile << 'rootProject.name = "broken"'
+        buildFile << """
+            interface ProjectModel {
+                ConfigurableFileCollection getProp()
+            }
+
+            project.extensions.create('thing', ProjectModel.class)
+            thing.prop.disallowUnsafeRead()
+
+            afterEvaluate {
+                thing.prop.from("some-file")
+                println("value = \${thing.prop.files}")
+                try {
+                    thing.prop.from("ignore me")
+                } catch(IllegalStateException e) {
+                    println("set failed with: \${e.message}")
+                }
+            }
+
+            task show {
+                doLast {
+                    println("value = \${thing.prop.files}")
+                }
+            }
+        """
+
+        when:
+        run("show")
+
+        then:
         outputContains("set failed with: The value for this file collection is final and cannot be changed.")
         output.count("value = [${file('some-file')}]") == 2
     }
