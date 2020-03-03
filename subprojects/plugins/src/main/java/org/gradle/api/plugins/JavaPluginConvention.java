@@ -18,9 +18,11 @@ package org.gradle.api.plugins;
 
 import groovy.lang.Closure;
 import org.gradle.api.Action;
+import org.gradle.api.Incubating;
 import org.gradle.api.JavaVersion;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.java.archives.Manifest;
+import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.SourceSetContainer;
 
 import java.io.File;
@@ -171,11 +173,21 @@ public abstract class JavaPluginConvention {
     public abstract void disableAutoTargetJvm();
 
     /**
-     * Tells if automatic JVM targetting is enabled. When disabled, Gradle
+     * Tells if automatic JVM targeting is enabled. When disabled, Gradle
      * will not automatically try to get dependencies corresponding to the
      * same (or compatible) level as the target compatibility of this module.
      *
      * @since 5.3
      */
     public abstract boolean getAutoTargetJvmDisabled();
+
+    /**
+     * Define an Automatic-Module-Name for the Jar build from the mains source set.
+     * The name will be written to the Jar's MANIFEST and Gradle will treat the
+     * Jar as a JPMS module in case it is on the module path of another (sub)project.
+     *
+     * @since 6.3
+     */
+    @Incubating
+    public abstract Property<String> getAutomaticModuleName();
 }

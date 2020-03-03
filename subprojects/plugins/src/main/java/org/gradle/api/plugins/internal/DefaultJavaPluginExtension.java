@@ -29,6 +29,7 @@ import org.gradle.api.plugins.FeatureSpec;
 import org.gradle.api.plugins.JavaPluginConvention;
 import org.gradle.api.plugins.JavaPluginExtension;
 import org.gradle.api.plugins.PluginManager;
+import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.internal.component.external.model.ProjectDerivedCapability;
@@ -118,6 +119,11 @@ public class DefaultJavaPluginExtension implements JavaPluginExtension {
         ConfigurationContainer configurations = project.getConfigurations();
         SourceSet main = convention.getSourceSets().getByName(SourceSet.MAIN_SOURCE_SET_NAME);
         configureDocumentationVariantWithArtifact(SOURCES_ELEMENTS_CONFIGURATION_NAME, null, SOURCES, ImmutableList.of(), main.getSourcesJarTaskName(), main.getAllSource(), findJavaComponent(components), configurations, tasks, objectFactory);
+    }
+
+    @Override
+    public Property<String> getAutomaticModuleName() {
+        return convention.getAutomaticModuleName();
     }
 
     private static String validateFeatureName(String name) {

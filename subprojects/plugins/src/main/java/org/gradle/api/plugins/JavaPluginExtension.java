@@ -20,6 +20,7 @@ import org.gradle.api.Action;
 import org.gradle.api.Incubating;
 import org.gradle.api.JavaVersion;
 import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.provider.Property;
 
 /**
  * Common configuration for Java based projects. This is added by the {@link JavaBasePlugin}.
@@ -107,4 +108,14 @@ public interface JavaPluginExtension {
      */
     @Incubating
     void withSourcesJar();
+
+    /**
+     * Define an Automatic-Module-Name for the Jar build from the mains source set.
+     * The name will be written to the Jar's MANIFEST and Gradle will treat the
+     * Jar as a JPMS module in case it is on the module path of another (sub)project.
+     *
+     * @since 6.3
+     */
+    @Incubating
+    Property<String> getAutomaticModuleName();
 }

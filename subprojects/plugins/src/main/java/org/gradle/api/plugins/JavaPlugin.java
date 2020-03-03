@@ -47,6 +47,7 @@ import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.plugins.internal.JavaConfigurationVariantMapping;
 import org.gradle.api.plugins.internal.JvmPluginsHelper;
+import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.TaskProvider;
@@ -332,6 +333,10 @@ public class JavaPlugin implements Plugin<ProjectInternal> {
                 jar.setDescription("Assembles a jar archive containing the main classes.");
                 jar.setGroup(BasePlugin.BUILD_GROUP);
                 jar.from(pluginConvention.getSourceSets().getByName(SourceSet.MAIN_SOURCE_SET_NAME).getOutput());
+                Property<String> automaticModuleName = pluginConvention.getAutomaticModuleName();
+                if (automaticModuleName.isPresent()) {
+                    jar.getManifest().attributes(Collections.singletonMap("Automatic-Module-Name", automaticModuleName.get()));
+                }
             }
         });
         PublishArtifact jarArtifact = new LazyPublishArtifact(jar);

@@ -26,6 +26,7 @@ import org.gradle.api.java.archives.Manifest;
 import org.gradle.api.java.archives.internal.DefaultManifest;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.plugins.JavaPluginConvention;
+import org.gradle.api.provider.Property;
 import org.gradle.api.reflect.HasPublicType;
 import org.gradle.api.reflect.TypeOf;
 import org.gradle.api.reporting.ReportingExtension;
@@ -54,12 +55,15 @@ public class DefaultJavaPluginConvention extends JavaPluginConvention implements
 
     private boolean autoTargetJvm = true;
 
+    private final Property<String> automaticModuleName;
+
     public DefaultJavaPluginConvention(ProjectInternal project, ObjectFactory objectFactory) {
         this.project = project;
         sourceSets = objectFactory.newInstance(DefaultSourceSetContainer.class);
         docsDirName = "docs";
         testResultsDirName = TestingBasePlugin.TEST_RESULTS_DIR_NAME;
         testReportDirName = TestingBasePlugin.TESTS_DIR_NAME;
+        automaticModuleName = objectFactory.property(String.class);
     }
 
     @Override
@@ -190,5 +194,10 @@ public class DefaultJavaPluginConvention extends JavaPluginConvention implements
     @Override
     public boolean getAutoTargetJvmDisabled() {
         return !autoTargetJvm;
+    }
+
+    @Override
+    public Property<String> getAutomaticModuleName() {
+        return automaticModuleName;
     }
 }
