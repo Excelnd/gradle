@@ -104,6 +104,10 @@ public class BasicGlobalScopeServices {
         return new DefaultDirectoryFileTreeFactory(patternSetFactory, fileSystem);
     }
 
+    PropertyHost createPropertyHost() {
+        return PropertyHost.NO_OP;
+    }
+
     FileCollectionFactory createFileCollectionFactory(PathToFileResolver fileResolver, Factory<PatternSet> patternSetFactory, DirectoryFileTreeFactory directoryFileTreeFactory, PropertyHost propertyHost, FileSystem fileSystem) {
         return new DefaultFileCollectionFactory(fileResolver, DefaultTaskDependencyFactory.withNoAssociatedProject(), directoryFileTreeFactory, patternSetFactory, propertyHost, fileSystem);
     }

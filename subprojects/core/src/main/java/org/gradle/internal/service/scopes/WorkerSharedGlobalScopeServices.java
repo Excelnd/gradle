@@ -99,10 +99,6 @@ public class WorkerSharedGlobalScopeServices extends BasicGlobalScopeServices {
         return DefaultTaskDependencyFactory.withNoAssociatedProject();
     }
 
-    PropertyHost createPropertyHost() {
-        return PropertyHost.NO_OP;
-    }
-
     DefaultFilePropertyFactory createFilePropertyFactory(PropertyHost propertyHost, FileResolver fileResolver, FileCollectionFactory fileCollectionFactory) {
         return new DefaultFilePropertyFactory(propertyHost, fileResolver, fileCollectionFactory);
     }
