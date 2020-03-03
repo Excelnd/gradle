@@ -27,7 +27,6 @@ import org.gradle.api.internal.model.NamedObjectInstantiator;
 import org.gradle.api.internal.provider.PropertyHost;
 import org.gradle.api.internal.tasks.DefaultTaskDependencyFactory;
 import org.gradle.api.internal.tasks.TaskDependencyFactory;
-import org.gradle.api.tasks.util.PatternSet;
 import org.gradle.cache.FileLockManager;
 import org.gradle.cache.internal.CacheFactory;
 import org.gradle.cache.internal.CrossBuildInMemoryCacheFactory;
@@ -35,7 +34,6 @@ import org.gradle.cache.internal.DefaultCacheFactory;
 import org.gradle.cache.internal.DefaultCrossBuildInMemoryCacheFactory;
 import org.gradle.initialization.DefaultLegacyTypesSupport;
 import org.gradle.initialization.LegacyTypesSupport;
-import org.gradle.internal.Factory;
 import org.gradle.internal.concurrent.ExecutorFactory;
 import org.gradle.internal.event.ListenerManager;
 import org.gradle.internal.file.Deleter;
@@ -121,10 +119,10 @@ public class WorkerSharedGlobalScopeServices extends BasicGlobalScopeServices {
         return new DefaultDeleter(clock::getCurrentTime, fileSystem::isSymlink, os.isWindows());
     }
 
-    ManagedFactoryRegistry createManagedFactoryRegistry(NamedObjectInstantiator namedObjectInstantiator, FileResolver fileResolver, InstantiatorFactory instantiatorFactory, TaskDependencyFactory taskDependencyFactory, Factory<PatternSet> patternSetFactory, FileFactory fileFactory, FilePropertyFactory filePropertyFactory) {
+    ManagedFactoryRegistry createManagedFactoryRegistry(NamedObjectInstantiator namedObjectInstantiator, InstantiatorFactory instantiatorFactory, FileCollectionFactory fileCollectionFactory, FileFactory fileFactory, FilePropertyFactory filePropertyFactory) {
         return new DefaultManagedFactoryRegistry().withFactories(
             instantiatorFactory.getManagedFactory(),
-            new ConfigurableFileCollectionManagedFactory(fileResolver, taskDependencyFactory, patternSetFactory),
+            new ConfigurableFileCollectionManagedFactory(fileCollectionFactory),
             new RegularFileManagedFactory(fileFactory),
             new RegularFilePropertyManagedFactory(filePropertyFactory),
             new DirectoryManagedFactory(fileFactory),

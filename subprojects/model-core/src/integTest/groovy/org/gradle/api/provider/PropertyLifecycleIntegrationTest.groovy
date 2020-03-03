@@ -215,11 +215,10 @@ task show {
         then:
         outputContains("get failed with: Cannot query the value of extension 'thing' property 'prop' because configuration of root project 'broken' has not finished yet.")
         outputContains("set failed with: The value for extension 'thing' property 'prop' is final and cannot be changed any further.")
-        outputContains("value = 123")
-        outputContains("value = 123")
+        output.count("value = 123") == 2
     }
 
-    def "can change strict property value after afterEvaluate starts and before the value has been read"() {
+    def "can change value of strict property after afterEvaluate starts and before the value has been read"() {
         given:
         settingsFile << 'rootProject.name = "broken"'
         buildFile << """

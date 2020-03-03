@@ -191,11 +191,11 @@ public class TestFiles {
     }
 
     public static FileCollectionFactory fileCollectionFactory() {
-        return new DefaultFileCollectionFactory(pathToFileResolver(), DefaultTaskDependencyFactory.withNoAssociatedProject(), directoryFileTreeFactory(), getPatternSetFactory(), fileSystem());
+        return new DefaultFileCollectionFactory(pathToFileResolver(), DefaultTaskDependencyFactory.withNoAssociatedProject(), directoryFileTreeFactory(), getPatternSetFactory(), PropertyHost.NO_OP, fileSystem());
     }
 
     public static FileCollectionFactory fileCollectionFactory(File baseDir) {
-        return new DefaultFileCollectionFactory(pathToFileResolver(baseDir), DefaultTaskDependencyFactory.withNoAssociatedProject(), directoryFileTreeFactory(), getPatternSetFactory(), fileSystem());
+        return new DefaultFileCollectionFactory(pathToFileResolver(baseDir), DefaultTaskDependencyFactory.withNoAssociatedProject(), directoryFileTreeFactory(), getPatternSetFactory(), PropertyHost.NO_OP, fileSystem());
     }
 
     public static ExecFactory execFactory() {

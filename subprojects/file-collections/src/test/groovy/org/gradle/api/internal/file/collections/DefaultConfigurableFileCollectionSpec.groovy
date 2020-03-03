@@ -37,13 +37,13 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
     def taskDependencyFactory = Stub(TaskDependencyFactory) {
         _ * configurableDependency() >> new DefaultTaskDependency(taskResolver)
     }
-    def collection = new DefaultConfigurableFileCollection("<display>", fileResolver, taskDependencyFactory, patternSetFactory, [])
+    def collection = new DefaultConfigurableFileCollection("<display>", fileResolver, taskDependencyFactory, patternSetFactory)
 
     @Override
     AbstractFileCollection containing(File... files) {
         def resolver = Stub(FileResolver)
         _ * resolver.resolve(_) >> { File f -> f }
-        return new DefaultConfigurableFileCollection("<display>", resolver, taskDependencyFactory, patternSetFactory, files as List)
+        return new DefaultConfigurableFileCollection("<display>", resolver, taskDependencyFactory, patternSetFactory).from(files)
     }
 
     def resolvesSpecifiedFilesUsingFileResolver() {
@@ -52,7 +52,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         def file2 = new File("2")
 
         when:
-        def collection = new DefaultConfigurableFileCollection("<display>", fileResolver, taskDependencyFactory, patternSetFactory, ["a", "b"])
+        def collection = new DefaultConfigurableFileCollection("<display>", fileResolver, taskDependencyFactory, patternSetFactory).from("a", "b")
         def from = collection.from
         def files = collection.files
 
@@ -87,18 +87,40 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
 
     def canMutateTheFromCollection() {
         collection.from("src1", "src2")
+        def from = collection.from
 
         when:
-        collection.from.clear()
+        from.clear()
 
         then:
+        from.empty
         collection.from.empty
 
         when:
-        collection.from.add('a')
+        def add1 = from.add('a')
+        def add2 = from.add('b')
+        def add3 = from.add('a')
 
         then:
-        collection.from as List == ['a']
+        add1
+        add2
+        !add3
+
+        and:
+        from as List == ['a', 'b']
+        collection.from as List == ['a', 'b']
+
+        when:
+        def remove1 = from.remove('unknown')
+        def remove2 = from.remove('a')
+
+        then:
+        !remove1
+        remove2
+
+        and:
+        from as List == ['b']
+        collection.from as List == ['b']
     }
 
     def resolvesSpecifiedPathsUsingFileResolver() {
