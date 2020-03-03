@@ -1157,7 +1157,7 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         0 * fileResolver._
     }
 
-    def canFinalizeWhenAlreadyImplicitlyFinalized() {
+    def canFinalizeWhenAlreadyImplicitlyFinalizedButNotQueried() {
         given:
         def file = new File('one')
         collection.from('a')
@@ -1174,5 +1174,94 @@ class DefaultConfigurableFileCollectionSpec extends FileCollectionSpec {
         then:
         1 * fileResolver.resolve('a') >> file
         0 * fileResolver._
+    }
+
+    def canFinalizeWhenAlreadyImplicitlyFinalized() {
+        given:
+        def file = new File('one')
+        collection.from('a')
+
+        when:
+        collection.implicitFinalizeValue()
+
+        then:
+        0 * fileResolver._
+
+        when:
+        collection.files
+
+        then:
+        1 * fileResolver.resolve('a') >> file
+        0 * fileResolver._
+
+        when:
+        collection.finalizeValue()
+
+        then:
+        0 * fileResolver._
+    }
+
+    def cannotQueryFilesWhenUnsafeReadsDisallowedAndHostIsNotReady() {
+        given:
+        def file = new File('one')
+        collection.from('a')
+        collection.disallowUnsafeRead()
+
+        when:
+        collection.files
+
+        then:
+        def e = thrown(IllegalStateException)
+        e.message == "Cannot query the value for <display> because <reason>."
+
+        and:
+        1 * host.beforeRead() >> "<reason>"
+        0 * _
+
+        when:
+        def result = collection.files
+
+        then:
+        result == [file] as Set
+
+        and:
+        1 * host.beforeRead() >> null
+        1 * fileResolver.resolve('a') >> file
+        0 * _
+    }
+
+    def cannotQueryElementsWhenUnsafeReadsDisallowedAndHostIsNotReady() {
+        given:
+        def file = new File('one')
+        collection.from('a')
+        collection.disallowUnsafeRead()
+
+        when:
+        def elements = collection.elements
+
+        then:
+        0 * _
+
+        when:
+        elements.get()
+
+        then:
+        def e = thrown(IllegalStateException)
+        e.message == "Cannot query the value for <display> because <reason>."
+
+        and:
+        1 * host.beforeRead() >> "<reason>"
+        0 * _
+
+        when:
+        def result = elements.get()
+
+        then:
+        result.asFile == [file]
+
+        and:
+        1 * host.beforeRead() >> null
+        1 * fileResolver.resolve('a') >> file
+        0 * _
     }
 }
