@@ -95,8 +95,8 @@ public abstract class AbstractCollectionProperty<T, C extends Collection<T>> ext
     }
 
     private void addCollector(Collector<T> collector) {
-        useExplicitValue(defaultValue);
-        setSupplier(getSupplier().plus(collector));
+        assertCanMutate();
+        setSupplier(getExplicitValue(defaultValue).plus(collector));
     }
 
     @Nullable
@@ -128,16 +128,6 @@ public abstract class AbstractCollectionProperty<T, C extends Collection<T>> ext
             value = value.plus(new ElementsFromCollectionProvider<>(provider));
         }
         setSupplier(value);
-    }
-
-    @Override
-    protected Value<? extends C> calculateOwnValue() {
-        beforeRead();
-        return doCalculateOwnValue();
-    }
-
-    private Value<? extends C> doCalculateOwnValue() {
-        return getSupplier().calculateValue();
     }
 
     @Override
@@ -199,8 +189,13 @@ public abstract class AbstractCollectionProperty<T, C extends Collection<T>> ext
     }
 
     @Override
-    protected CollectionSupplier<T, C> finalValue() {
-        Value<? extends C> result = doCalculateOwnValue();
+    protected Value<? extends C> calculateOwnValue(CollectionSupplier<T, C> value) {
+        return value.calculateValue();
+    }
+
+    @Override
+    protected CollectionSupplier<T, C> finalValue(CollectionSupplier<T, C> value) {
+        Value<? extends C> result = calculateOwnValue(value);
         if (!result.isMissing()) {
             return new FixedSupplier<>(result.get());
         } else if (result.getPathToOrigin().isEmpty()) {

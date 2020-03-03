@@ -27,10 +27,6 @@ import org.gradle.internal.logging.text.TreeFormatter;
 import javax.annotation.Nullable;
 
 public abstract class AbstractProperty<T, S extends ValueSupplier> extends AbstractMinimalProvider<T> implements PropertyInternal<T> {
-    private enum State {
-        ImplicitValue, ExplicitValue, Final
-    }
-
     private static final FinalizedValue<Object> FINALIZED_VALUE = new FinalizedValue<>();
     private static final DisplayName DEFAULT_DISPLAY_NAME = Describables.of("this property");
     private static final DisplayName DEFAULT_VALIDATION_DISPLAY_NAME = Describables.of("a property");
@@ -102,6 +98,14 @@ public abstract class AbstractProperty<T, S extends ValueSupplier> extends Abstr
         return value;
     }
 
+    @Override
+    protected Value<? extends T> calculateOwnValue() {
+        beforeRead();
+        return calculateOwnValue(value);
+    }
+
+    protected abstract Value<? extends T> calculateOwnValue(S value);
+
     /**
      * Returns a diagnostic string describing the current source of value of this property. Should not realize the value.
      */
@@ -143,7 +147,7 @@ public abstract class AbstractProperty<T, S extends ValueSupplier> extends Abstr
     @Override
     public void finalizeValue() {
         if (state.isNotFinal()) {
-            value = finalValue();
+            value = finalValue(value);
             state = state.finalState();
         }
     }
@@ -169,7 +173,7 @@ public abstract class AbstractProperty<T, S extends ValueSupplier> extends Abstr
         state.disallowUnsafeRead();
     }
 
-    protected abstract S finalValue();
+    protected abstract S finalValue(S value);
 
     protected void setSupplier(S supplier) {
         assertCanMutate();
@@ -187,17 +191,16 @@ public abstract class AbstractProperty<T, S extends ValueSupplier> extends Abstr
     protected void beforeRead() {
         state.beforeRead(getDisplayName());
         if (state.isFinalizeOnRead()) {
-            value = finalValue();
+            value = finalValue(value);
             state = state.finalState();
         }
     }
 
     /**
-     * Call prior to mutating the value of this property, use the default value if no explicit value has been set. Ignores the convention.
+     * Returns the current value of this property, if explicitly defined, otherwise the given default. Does not apply the convention.
      */
-    protected void useExplicitValue(S defaultValue) {
-        assertCanMutate();
-        value = state.explicitValue(value, defaultValue);
+    protected S getExplicitValue(S defaultValue) {
+        return state.explicitValue(value, defaultValue);
     }
 
     /**
@@ -243,7 +246,7 @@ public abstract class AbstractProperty<T, S extends ValueSupplier> extends Abstr
     private static class NonFinalizedValue<S> extends FinalizationState<S> {
 
         private final PropertyHost host;
-        private State state = State.ImplicitValue;
+        private boolean explicitValue;
         private boolean finalizeOnNextGet;
         private boolean disallowChanges;
         private boolean disallowUnsafeRead;
@@ -309,14 +312,13 @@ public abstract class AbstractProperty<T, S extends ValueSupplier> extends Abstr
 
         @Override
         public S explicitValue(S value) {
-            state = State.ExplicitValue;
+            explicitValue = true;
             return value;
         }
 
         @Override
         public S explicitValue(S value, S defaultValue) {
-            if (state == State.ImplicitValue) {
-                state = State.ExplicitValue;
+            if (!explicitValue) {
                 return defaultValue;
             }
             return value;
@@ -324,14 +326,14 @@ public abstract class AbstractProperty<T, S extends ValueSupplier> extends Abstr
 
         @Override
         public S implicitValue() {
-            state = State.ImplicitValue;
+            explicitValue = false;
             return convention;
         }
 
         @Override
         public S applyConvention(S value, S convention) {
             this.convention = convention;
-            if (state == State.ImplicitValue) {
+            if (!explicitValue) {
                 return convention;
             } else {
                 return value;

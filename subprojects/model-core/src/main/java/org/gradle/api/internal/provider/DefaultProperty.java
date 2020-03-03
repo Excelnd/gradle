@@ -117,14 +117,13 @@ public class DefaultProperty<T> extends AbstractProperty<T, ProviderInternal<? e
     }
 
     @Override
-    protected ProviderInternal<? extends T> finalValue() {
-        return getSupplier().withFinalValue();
+    protected Value<? extends T> calculateOwnValue(ProviderInternal<? extends T> value) {
+        return value.calculateValue();
     }
 
     @Override
-    protected Value<? extends T> calculateOwnValue() {
-        beforeRead();
-        return getSupplier().calculateValue();
+    protected ProviderInternal<? extends T> finalValue(ProviderInternal<? extends T> value) {
+        return value.withFinalValue();
     }
 
     @Override

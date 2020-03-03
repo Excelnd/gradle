@@ -26,7 +26,6 @@ import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
 import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Provider;
 import org.gradle.internal.Cast;
-import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -89,17 +88,6 @@ public class DefaultMapProperty<K, V> extends AbstractProperty<Map<K, V>, MapSup
     @Override
     public int getFactoryId() {
         return ManagedFactories.MapPropertyManagedFactory.FACTORY_ID;
-    }
-
-    @Override
-    protected Value<? extends Map<K, V>> calculateOwnValue() {
-        beforeRead();
-        return doCalculateOwnValue();
-    }
-
-    @NotNull
-    private Value<? extends Map<K, V>> doCalculateOwnValue() {
-        return getSupplier().calculateValue();
     }
 
     @Override
@@ -187,8 +175,8 @@ public class DefaultMapProperty<K, V> extends AbstractProperty<Map<K, V>, MapSup
     }
 
     private void addCollector(MapCollector<K, V> collector) {
-        useExplicitValue(defaultValue);
-        setSupplier(getSupplier().plus(collector));
+        assertCanMutate();
+        setSupplier(getExplicitValue(defaultValue).plus(collector));
     }
 
     @SuppressWarnings("unchecked")
@@ -254,15 +242,20 @@ public class DefaultMapProperty<K, V> extends AbstractProperty<Map<K, V>, MapSup
     }
 
     @Override
-    protected MapSupplier<K, V> finalValue() {
-        Value<? extends Map<K, V>> value = doCalculateOwnValue();
-        if (!value.isMissing()) {
-            Map<K, V> entries = value.get();
+    protected Value<? extends Map<K, V>> calculateOwnValue(MapSupplier<K, V> value) {
+        return value.calculateValue();
+    }
+
+    @Override
+    protected MapSupplier<K, V> finalValue(MapSupplier<K, V> value) {
+        Value<? extends Map<K, V>> result = calculateOwnValue(value);
+        if (!result.isMissing()) {
+            Map<K, V> entries = result.get();
             return new FixedSuppler<>(entries);
-        } else if (value.getPathToOrigin().isEmpty()) {
+        } else if (result.getPathToOrigin().isEmpty()) {
             return noValueSupplier();
         } else {
-            return new NoValueSupplier<>(value);
+            return new NoValueSupplier<>(result);
         }
     }
 
@@ -281,8 +274,7 @@ public class DefaultMapProperty<K, V> extends AbstractProperty<Map<K, V>, MapSup
 
         @Override
         protected Value<? extends V> calculateOwnValue() {
-            beforeRead();
-            Value<? extends Map<K, V>> result = doCalculateOwnValue();
+            Value<? extends Map<K, V>> result = DefaultMapProperty.this.calculateOwnValue();
             if (result.isMissing()) {
                 return result.asType();
             }
